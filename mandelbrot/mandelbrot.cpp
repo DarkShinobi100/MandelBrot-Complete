@@ -202,13 +202,13 @@ void compute_mandelbrot(double left, double right, double top, double bottom, in
 	array_view<uint32_t, 2> a(HEIGHT, WIDTH, pImage); //this is called "a" for 'reasons *head nod* ;) aubergene(eggplant) *water dropplets sfx*(;' 
 	a.discard_data();
 	   
-	parallel_for_each(a.extent, [=, &image](concurrency::index<2> idx)
+	parallel_for_each(a.extent, [=](concurrency::index<2> idx)
 		restrict(amp) {
 			//compute madelbrot here i.e madelbrot kernel/shader
 				//USE THREAD ID/INDEX TO MAP INTO THE COMPLEX PLANE
-				int h = idx[0];
-				int w = idx[1];
-				Complex1 c;
+			int h = idx[0];
+			int w = idx[1];
+			Complex1 c;
 
 			// Work out the point in the complex plane that
 			// corresponds to this pixel in the output image.
@@ -235,16 +235,17 @@ void compute_mandelbrot(double left, double right, double top, double bottom, in
 			{
 				// z didn't escape from the circle.
 				// This point is in the Mandelbrot set.
-				image[h][w] = 0x000000; // black
+				a[h][w] = 0x000000; // black
 			}
 			else
 			{
 				// z escaped within less than MAX_ITERATIONS
 				// iterations. This point isn't in the set.
-				image[h][w] = 0xFFFFFF; // white
+				a[h][w] = 0xFFFFFF; // white
 				//image[y][x] = makeColour(0xAF, 0xEC, 0xDB);
-				
-			});
+
+			}
+		});
 
 
 	//for (int y = ymin; y < ymax; ++y)
