@@ -1,4 +1,4 @@
 ﻿  mandelbrot.cpp
 LINK : warning LNK4075: ignoring '/INCREMENTAL' due to '/PROFILE' specification
 mandelbrot.obj : warning LNK4075: ignoring '/EDITANDCONTINUE' due to '/OPT:REF' specification
-  mandelbrot.vcxproj -> M:\CMP 202\mandelbrot\mandelbrot\x64\Debug\mandelbrot.exe
+  mandelbrot.vcxproj -> \\StuHomeEven\HomeDrive8$\1901418\GitHub\MandelBrot-Complete\x64\Debug\mandelbrot.exe

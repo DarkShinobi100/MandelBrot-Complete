@@ -49,6 +49,8 @@
 #include <fstream>
 #include <iostream>
 #include "string.h"
+#include <amp.h>
+#include <amp_math.h>
 
 // Import things we need from the standard library
 using std::chrono::duration_cast;
@@ -57,6 +59,7 @@ using std::complex;
 using std::cout;
 using std::endl;
 using std::ofstream;
+using namespace concurrency;
 
 // Define the alias "the_clock" for the clock type we're going to use.
 typedef std::chrono::steady_clock the_clock;
@@ -125,28 +128,105 @@ unsigned long makeColour(int r, int g, int b)
 	return ((r & 0xff) << 16) + ((g & 0xff) << 8) + (b & 0xff);
 }
 
+// using our own Complex number structure and definitions as the Complex type is not available in the Concurrency namespace
+
+struct Complex1 {
+
+	float x;
+
+	float y;
+
+};
+
+
+Complex1 c_add(Complex1 c1, Complex1 c2) restrict(cpu, amp) // restrict keyword - able to execute this function on the GPU and CPU
+
+{
+
+	Complex1 tmp;
+
+	float a = c1.x;
+
+	float b = c1.y;
+
+	float c = c2.x;
+
+	float d = c2.y;
+
+	tmp.x = a + c;
+
+	tmp.y = b + d;
+
+	return tmp;
+
+} // c_add
+
+
+float c_abs(Complex1 c) restrict(cpu, amp)
+
+{
+
+	return concurrency::fast_math::sqrt(c.x * c.x + c.y * c.y);
+
+} // c_abs
+
+
+Complex1 c_mul(Complex1 c1, Complex1 c2) restrict(cpu, amp)
+
+{
+
+	Complex1 tmp;
+
+	float a = c1.x;
+
+	float b = c1.y;
+
+	float c = c2.x;
+
+	float d = c2.y;
+
+	tmp.x = a * c - b * d;
+
+	tmp.y = b * c + a * d;
+
+	return tmp;
+
+} // c_mul
+
+
 // Render the Mandelbrot set into the image array.
 // The parameters specify the region on the complex plane to plot.
 void compute_mandelbrot(double left, double right, double top, double bottom, int ymin, int ymax)
 {
-	for (int y = ymin; y < ymax; ++y)
-	{
-		for (int x = 0; x < WIDTH; ++x)
-		{
+	uint32_t* pImage = &(image[0][0]);
+	array_view<uint32_t, 2> a(HEIGHT, WIDTH, pImage); //this is called "a" for 'reasons *head nod* ;) aubergene(eggplant) *water dropplets sfx*(;' 
+	a.discard_data();
+	   
+	parallel_for_each(a.extent, [=, &image](concurrency::index<2> idx)
+		restrict(amp) {
+			//compute madelbrot here i.e madelbrot kernel/shader
+				//USE THREAD ID/INDEX TO MAP INTO THE COMPLEX PLANE
+				int h = idx[0];
+				int w = idx[1];
+				Complex1 c;
+
 			// Work out the point in the complex plane that
 			// corresponds to this pixel in the output image.
-			complex<double> c(left + (x * (right - left) / WIDTH),
-				top + (y * (bottom - top) / HEIGHT));
+			c.x = left + (h * (right - left) / WIDTH);
+			c.y = top + (w * (bottom - top) / HEIGHT);
 
-			// Start off z at (0, 0).
-			complex<double> z(0.0, 0.0);
+			// Start off z at (0, 0)
+			Complex1 z;
+			z.x = 0.0f;
+			z.y = 0.0f;
 
 			// Iterate z = z^2 + c until z moves more than 2 units
 			// away from (0, 0), or we've iterated too many times.
 			int iterations = 0;
-			while (abs(z) < 2.0 && iterations < MAX_ITERATIONS)
+			while (c_abs(z) < 2.0 && iterations < MAX_ITERATIONS)
 			{
-				z = (z * z) + c;
+				z.x = (z.x * z.x) + c.x;
+				z.y = (z.y * z.y) + c.y;
 
 				++iterations;
 			}
@@ -155,42 +235,83 @@ void compute_mandelbrot(double left, double right, double top, double bottom, in
 			{
 				// z didn't escape from the circle.
 				// This point is in the Mandelbrot set.
-				//image[y][x] = 0x000000; // black
-				image[y][x] = makeColour(0xFA, 0x09, 0xCA);
+				image[h][w] = 0x000000; // black
 			}
 			else
 			{
 				// z escaped within less than MAX_ITERATIONS
 				// iterations. This point isn't in the set.
-				//image[y][x] = 0xFFFFFF; // white
+				image[h][w] = 0xFFFFFF; // white
 				//image[y][x] = makeColour(0xAF, 0xEC, 0xDB);
-				if (iterations >= 0 && iterations <= 100)
-				{
-					image[y][x] = makeColour(0x00, 0x00, 0xFE);
-				}
-				else if (iterations >= 101 && iterations <= 200)
-				{
-					image[y][x] = makeColour(0x00, 0x00, 0xEB);
-				}
-				else if (iterations >= 201 && iterations <= 450)
-				{
-					image[y][x] = makeColour(0x00, 0x00, 0xDA);
-				}
-				else if (iterations >= 451 && iterations <= 499)
-				{
-					image[y][x] = makeColour(0x00, 0x00, 0xCC);
-				}
-				else if (iterations >= 499 && iterations <= 500)
-				{
-					image[y][x] = makeColour(0x00, 0x00, 0xBC);
-				}
+				
+			});
 
 
-			}
-			
-		}
-	}
+	//for (int y = ymin; y < ymax; ++y)
+	//{
+	//	for (int x = 0; x < WIDTH; ++x)
+	//	{
+	//		// Work out the point in the complex plane that
+	//		// corresponds to this pixel in the output image.
+	//		complex<double> c(left + (x * (right - left) / WIDTH),
+	//			top + (y * (bottom - top) / HEIGHT));
+
+	//		// Start off z at (0, 0).
+	//		complex<double> z(0.0, 0.0);
+
+	//		// Iterate z = z^2 + c until z moves more than 2 units
+	//		// away from (0, 0), or we've iterated too many times.
+	//		int iterations = 0;
+	//		while (abs(z) < 2.0 && iterations < MAX_ITERATIONS)
+	//		{
+	//			z = (z * z) + c;
+
+	//			++iterations;
+	//		}
+
+	//		if (iterations == MAX_ITERATIONS)
+	//		{
+	//			// z didn't escape from the circle.
+	//			// This point is in the Mandelbrot set.
+	//			//image[y][x] = 0x000000; // black
+	//			image[y][x] = makeColour(0xFA, 0x09, 0xCA);
+	//		}
+	//		else
+	//		{
+	//			// z escaped within less than MAX_ITERATIONS
+	//			// iterations. This point isn't in the set.
+	//			//image[y][x] = 0xFFFFFF; // white
+	//			//image[y][x] = makeColour(0xAF, 0xEC, 0xDB);
+	//			if (iterations >= 0 && iterations <= 100)
+	//			{
+	//				image[y][x] = makeColour(0x00, 0x00, 0xFE);
+	//			}
+	//			else if (iterations >= 101 && iterations <= 200)
+	//			{
+	//				image[y][x] = makeColour(0x00, 0x00, 0xEB);
+	//			}
+	//			else if (iterations >= 201 && iterations <= 450)
+	//			{
+	//				image[y][x] = makeColour(0x00, 0x00, 0xDA);
+	//			}
+	//			else if (iterations >= 451 && iterations <= 499)
+	//			{
+	//				image[y][x] = makeColour(0x00, 0x00, 0xCC);
+	//			}
+	//			else if (iterations >= 499 && iterations <= 500)
+	//			{
+	//				image[y][x] = makeColour(0x00, 0x00, 0xBC);
+	//			}
+
+
+	//		}
+	//	
+	//
+	//	}
+	//}
 }
+
+
 
 
 int main(int argc, char *argv[])
